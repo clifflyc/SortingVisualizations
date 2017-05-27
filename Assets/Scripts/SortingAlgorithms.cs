@@ -21,7 +21,9 @@ public class SortingAlgorithms : MonoBehaviour {
 	public static float swapSpeed = 2f;
 	public static float compareTime = 0.03f;
 	[SerializeField]
-	Vector3 forkVector = new Vector3 (0, 0, -5);
+	Vector3 forkVector = new Vector3 (0, 2, -4);
+	[SerializeField]
+	Vector3 treeLoadingOffset = new Vector3 (0,1,0);
 	[SerializeField] GameObject prefab;
 
 	SortableObject[] pieces;
@@ -307,8 +309,53 @@ public class SortingAlgorithms : MonoBehaviour {
 	}
 
 	IEnumerator TreeSort(){
-		yield return null;
+		yield return Fork_Merge (0, pieces.Length / 2);
+		pieces [0].Complete ();
+		TreeNode root = new TreeNode (pieces [0]);
+		for (int i = 1; i < pieces.Length; i++) {
+			pieces[i].Highlight ();
+			yield return StartCoroutine (LoadChild (root, new TreeNode (pieces [i]), 1));
+		}
+		yield return TraverseTree (root, new int[]{0});
 	}
+
+	IEnumerator LoadChild (TreeNode parent, TreeNode child, int layer){
+		parent.piece.Highlight ();
+		yield return new WaitForSeconds (compareTime);
+		yield return LoadOntoNodeAnimation (parent.piece, child.piece);
+		parent.piece.Unhighlight ();
+		if (child.piece.value < parent.piece.value) {
+			if (parent.lowerChild != null) { 
+				yield return LoadChild (parent.lowerChild, child, layer + 1);
+			} else {
+				parent.lowerChild = child;
+				yield return LoadIntoPlaceAnimation (parent.piece, child.piece, layer, true);
+				child.piece.Complete ();
+				child.piece.Unhighlight ();
+			}
+		} else {
+			if (parent.upperChild != null) {
+				yield return LoadChild (parent.upperChild, child, layer + 1);
+			} else {
+				parent.upperChild = child;
+				yield return LoadIntoPlaceAnimation (parent.piece, child.piece, layer, false);
+				child.piece.Complete ();
+				child.piece.Unhighlight ();
+			}
+		}
+	}
+	IEnumerator TraverseTree(TreeNode node, int[] index){
+		if (node.lowerChild != null) {
+			yield return TraverseTree (node.lowerChild, index);
+		}
+		pieces [index[0]] = node.piece;
+		yield return MoveToArrayPos (node.piece, index[0]);
+		index[0]++;
+		if (node.upperChild != null) {
+			yield return TraverseTree (node.upperChild, index);
+		}
+	}
+
 	IEnumerator Swap(int a, int b){
 		Vector3 posA = pieces [b].transform.position;
 		Vector3 posB = pieces [a].transform.position;
@@ -390,6 +437,40 @@ public class SortingAlgorithms : MonoBehaviour {
 		pieces [a].transform.position = posB;
 		t.transform.position = posA;
 		pieces [a + 1] = pieces [a];
+	}
+
+	IEnumerator LoadOntoNodeAnimation(SortableObject parent, SortableObject child){
+		float timeElapsed = 0;
+		Vector3 targetPos = parent.transform.position + treeLoadingOffset;
+		while (Vector3.Distance (child.transform.position, targetPos) > 0.02f) {
+			child.transform.position = Vector3.Lerp (child.transform.position, targetPos, swapSpeed * timeElapsed);
+			timeElapsed += Time.deltaTime;
+			yield return null;
+		}
+		child.transform.position = targetPos;
+	}
+
+	IEnumerator LoadIntoPlaceAnimation(SortableObject parent, SortableObject child, int layer, bool lower){
+		float timeElapsed = swapSpeed/20;
+		Vector3 targetPos = parent.transform.position + treeLoadingOffset;
+		targetPos.x += (lower ? -1 : 1) * (GetXOfIndex (pieces.Length - 1) - GetXOfIndex (0)) / Mathf.Pow (2, layer) /2;
+		while (Vector3.Distance (child.transform.position, targetPos) > 0.02f) {
+			child.transform.position = Vector3.Lerp (child.transform.position, targetPos, swapSpeed * timeElapsed);
+			timeElapsed += Time.deltaTime;
+			yield return null;
+		}
+		child.transform.position = targetPos;
+	}
+
+	IEnumerator MoveToArrayPos(SortableObject p, int index){
+		float timeElapsed = 0;
+		Vector3 targetPos = new Vector3 (GetXOfIndex (index), 0, 0);
+		while (Vector3.Distance (p.transform.position, targetPos) > 0.02f) {
+			p.transform.position = Vector3.Lerp (p.transform.position, targetPos, swapSpeed * timeElapsed);
+			timeElapsed += Time.deltaTime;
+			yield return null;
+		}
+		p.transform.position = targetPos;
 	}
 
 }
